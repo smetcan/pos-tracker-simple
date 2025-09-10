@@ -25,6 +25,13 @@ document.addEventListener('DOMContentLoaded', () => {
         isAndroidPos: 'all',
         isOkcPos: 'all'
     };
+    // Filters for Bulgular page
+    let bulguFilters = {
+        searchTerm: '',
+        vendorId: 'all',
+        status: 'all',
+        tip: 'all'
+    };
 
 
     // --- OLAY DİNLEYİCİLER (EVENT LISTENERS) ---
@@ -113,21 +120,52 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        const bulgularTableRows = bulgular.map(bulgu => `
+        const bulgularTableRows = bulgular.map(bulgu => {
+            const vendorName = bulgu.vendorName || (vendorsData.find(v => v.id == bulgu.vendorId)?.name) || '';
+            const versionName = bulgu.cozumVersiyonId ? (versionsData.find(v => v.id == bulgu.cozumVersiyonId)?.versionNumber || '') : '';
+            // Compute affected model names as an array (prefer modelIds), then render as multi-line HTML with 4 models per line
+            let affectedModelsArray = [];
+            if (bulgu.modelIds) {
+                const ids = (typeof bulgu.modelIds === 'string') ? bulgu.modelIds.split(',').map(s => s.trim()) : bulgu.modelIds;
+                affectedModelsArray = ids.map(id => modelsData.find(m => String(m.id) === String(id))?.name).filter(Boolean);
+            }
+            if (!affectedModelsArray.length && bulgu.models) {
+                affectedModelsArray = (typeof bulgu.models === 'string') ? bulgu.models.split(',').map(s => s.trim()).filter(Boolean) : (Array.isArray(bulgu.models) ? bulgu.models : []);
+            }
+            // Helper to chunk array into groups
+            const chunkArray = (arr, size) => {
+                const res = [];
+                for (let i = 0; i < arr.length; i += size) res.push(arr.slice(i, i + size));
+                return res;
+            };
+            const formattedModelsHtml = (affectedModelsArray.length > 0) ? chunkArray(affectedModelsArray, 4).map(group => `<div class="mb-1">${group.map(m => `<span class="inline-block mr-2 text-xs text-gray-700">${m}</span>`).join('')}</div>`).join('') : '-';
+            const tespit = bulgu.tespitTarihi || '';
+            const onaylayan = bulgu.cozumOnaylayanKullanici || '';
+            const onayTarihi = bulgu.cozumOnayTarihi || '';
+            return `
             <tr class="border-b">
-                <td class="p-3 text-sm text-gray-500">#${bulgu.id}</td>
+                <td class="p-3 text-sm text-gray-500"><a href="#" class="view-bulgu-btn text-blue-600" data-bulgu-id="${bulgu.id}">#${bulgu.id}</a></td>
                 <td class="p-3 font-medium">${bulgu.baslik}</td>
-                <td class="p-3 text-sm text-gray-600">${bulgu.vendorName || ''}</td>
-                <td class="p-3 text-xs text-gray-500">${bulgu.models || '-'}</td>
+                <td class="p-3 text-sm text-gray-600">${vendorName}</td>
+                <td class="p-3 text-sm text-gray-600">${versionName || '-'}</td>
+                <td class="p-3 text-xs text-gray-500">${formattedModelsHtml}</td>
                 <td class="p-3"><span class="px-2 py-1 text-xs font-medium rounded-full ${getBadgeClass(bulgu.bulguTipi)}">${bulgu.bulguTipi}</span></td>
                 <td class="p-3"><span class="px-2 py-1 text-xs font-medium rounded-full ${getBadgeClass(bulgu.etkiSeviyesi)}">${bulgu.etkiSeviyesi}</span></td>
+                <td class="p-3 text-sm text-gray-600">${tespit}</td>
+                <td class="p-3 text-sm text-gray-600">${onaylayan}</td>
+                <td class="p-3 text-sm text-gray-600">${onayTarihi}</td>
                 <td class="p-3"><span class="px-2 py-1 text-xs font-medium rounded-full ${getBadgeClass(bulgu.status)}">${bulgu.status}</span></td>
                 <td class="p-3 text-right">
                     <button class="edit-bulgu-btn p-1 text-sm text-blue-600" data-bulgu-id="${bulgu.id}">Düzenle</button>
                     <button class="delete-bulgu-btn p-1 text-sm text-red-600" data-bulgu-id="${bulgu.id}" data-bulgu-baslik="${bulgu.baslik}">Sil</button>
                 </td>
             </tr>
-        `).join('');
+        `}).join('');
+
+        // Build vendor options for filter
+        const vendorFilterOptions = [{ id: 'all', name: 'Tümü' }].concat(vendorsData.map(v => ({ id: v.id, name: v.name }))).map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+        const statusOptions = ['all','Açık','Test Edilecek','Kapalı'].map(s => `<option value="${s}">${s === 'all' ? 'Tümü' : s}</option>`).join('');
+        const tipOptionsFilter = ['all','Program Hatası','Yeni Talep'].map(t => `<option value="${t}">${t === 'all' ? 'Tümü' : t}</option>`).join('');
 
         return `
             <div class="flex justify-between items-center mb-6">
@@ -137,15 +175,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <button id="add-bulgu-btn" class="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-md">Yeni Bulgu/Talep Ekle</button>
             </div>
+            <div class="mb-4 grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                <div>
+                    <label class="text-xs text-gray-500">Ara (Başlık / Açıklama)</label>
+                    <input id="bulgu-search-input" type="text" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Ara..." value="${bulguFilters.searchTerm}">
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500">Vendor</label>
+                    <select id="bulgu-vendor-filter" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">${vendorFilterOptions}</select>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500">Durum</label>
+                    <select id="bulgu-status-filter" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">${statusOptions}</select>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500">Kayıt Tipi</label>
+                    <select id="bulgu-tip-filter" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">${tipOptionsFilter}</select>
+                </div>
+            </div>
             <div class="bg-white rounded-lg shadow">
                 <div class="p-6">
-                    <div class="rounded-md border">
-                        <table class="w-full text-sm">
+                    <div class="rounded-md border overflow-x-auto">
+                        <table class="w-full text-sm min-w-[1100px]">
                             <thead>
                                 <tr class="border-b bg-gray-50">
-                                    <th class="p-3 text-left">ID</th><th class="p-3 text-left">Başlık</th><th class="p-3 text-left">Vendor</th>
-                                    <th class="p-3 text-left">Modeller</th><th class="p-3 text-left">Tip</th>
-                                    <th class="p-3 text-left">Etki</th><th class="p-3 text-left">Durum</th><th class="p-3 text-right">İşlemler</th>
+                                    <th class="p-3 text-left">ID</th>
+                                    <th class="p-3 text-left">Başlık</th>
+                                    <th class="p-3 text-left">Vendor</th>
+                                    <th class="p-3 text-left">Çözüm Beklenen Versiyon</th>
+                                    <th class="p-3 text-left">Modeller</th>
+                                    <th class="p-3 text-left">Tip</th>
+                                    <th class="p-3 text-left">Etki</th>
+                                    <th class="p-3 text-left">Tespit Tarihi</th>
+                                    <th class="p-3 text-left">Onaylayan Kişi</th>
+                                    <th class="p-3 text-left">Onay Tarihi</th>
+                                    <th class="p-3 text-left">Durum</th>
+                                    <th class="p-3 text-right">İşlemler</th>
                                 </tr>
                             </thead>
                             <tbody>${bulgularTableRows}</tbody>
@@ -191,7 +256,14 @@ document.addEventListener('DOMContentLoaded', () => {
                             <div class="col-span-full"><label class="text-sm font-medium">Başlık</label><input type="text" name="baslik" value="${baslik}" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
                             <div><label class="text-sm font-medium">İlgili Vendor</label><select id="bulgu-vendor-select" name="vendorId" ${isEdit ? 'disabled' : ''} required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"><option value="">Seçiniz...</option>${vendorOptions}</select></div>
                             <div><label class="text-sm font-medium">Çözüm Beklenen Versiyon</label><select id="bulgu-version-select" name="cozumVersiyonId" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"><option value="">Seçiniz...</option></select></div>
-                            <div class="col-span-full"><label class="text-sm font-medium">Etkilenen Modeller</label><div id="bulgu-models-checklist" class="mt-1 max-h-32 overflow-y-auto border p-2 rounded-md grid grid-cols-2 md:grid-cols-3 gap-2"></div></div>
+                            <div class="col-span-full">
+                                <label class="text-sm font-medium">Etkilenen Modeller</label>
+                                <div class="flex items-center justify-between mt-1 mb-2">
+                                    <div class="text-xs text-gray-500">Vendor'a ait modelleri seçin</div>
+                                    <div class="text-xs"><input type="checkbox" id="bulgu-select-all-models" class="mr-1 align-middle"><label for="bulgu-select-all-models" class="align-middle">Tümünü seç</label></div>
+                                </div>
+                                <div id="bulgu-models-checklist" class="mt-1 max-h-32 overflow-y-auto border p-2 rounded-md grid grid-cols-2 md:grid-cols-3 gap-2"></div>
+                            </div>
                             <div><label class="text-sm font-medium">Kayıt Tipi</label><select name="bulguTipi" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"><option value="">Seçiniz...</option>${tipOptions}</select></div>
                             <div><label class="text-sm font-medium">Etki Seviyesi</label><select name="etkiSeviyesi" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"><option value="">Seçiniz...</option>${etkiOptions}</select></div>
                             <div><label class="text-sm font-medium">Durum</label><select name="status" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">${statusOptions}</select></div>
@@ -199,8 +271,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             <div class="col-span-full"><label class="text-sm font-medium">Detaylı Açıklama</label><textarea name="detayliAciklama" rows="4" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">${detayliAciklama}</textarea></div>
                             <div><label class="text-sm font-medium">Giren Kişi</label><input type="text" name="girenKullanici" value="${girenKullanici}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
                             <div><label class="text-sm font-medium">Vendor Takip No</label><input type="text" name="vendorTrackerNo" value="${vendorTrackerNo}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
-                            <div><label class="text-sm font-medium">Onaylayan Kişi</label><input type="text" name="cozumOnaylayanKullanici" value="${cozumOnaylayanKullanici}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
-                            <div><label class="text-sm font-medium">Onay Tarihi</label><input type="date" name="cozumOnayTarihi" value="${cozumOnayTarihi}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
+                            <div id="bulgu-approval-container" class="col-span-full ${status !== 'Kapalı' ? 'hidden' : ''}">
+                                <div class="md:grid md:grid-cols-2 md:gap-x-4">
+                                    <div><label class="text-sm font-medium">Onaylayan Kişi</label><input type="text" name="cozumOnaylayanKullanici" value="${cozumOnaylayanKullanici}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
+                                    <div><label class="text-sm font-medium">Onay Tarihi</label><input type="date" name="cozumOnayTarihi" value="${cozumOnayTarihi}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
+                                </div>
+                            </div>
                         </form>
                         <div class="items-center px-4 py-3 text-right">
                             <button id="cancel-modal" class="px-4 py-2 bg-gray-200 rounded-md mr-2">İptal</button>
@@ -291,12 +367,92 @@ document.addEventListener('DOMContentLoaded', () => {
                             <div class="text-left"><label class="text-sm font-medium">Teslim Tarihi</label><input type="date" name="deliveryDate" value="${deliveryDate}" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
                             <div class="text-left"><label class="text-sm font-medium">Durum</label><select id="version-status-select" name="status" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"><option value="Test" ${status === 'Test' ? 'selected' : ''}>Test</option><option value="Prod" ${status === 'Prod' ? 'selected' : ''}>Prod</option></select></div>
                             <div id="prod-date-container" class="text-left ${status !== 'Prod' ? 'hidden' : ''}"><label class="text-sm font-medium">Prod Onay Tarihi</label><input type="date" name="prodOnayDate" value="${prodOnayDate}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
-                            <div class="text-left"><label class="text-sm font-medium">Geçerli Modeller</label><div id="version-models-checklist" class="mt-1 max-h-32 overflow-y-auto border p-2 rounded-md"></div></div>
+                            <div class="text-left"><label class="text-sm font-medium">Geçerli Modeller</label>
+                                <div class="mt-1 mb-2 flex items-center space-x-2"><input type="checkbox" id="version-select-all-models" class="h-4 w-4 rounded border-gray-300"><label for="version-select-all-models" class="text-sm">Tümünü seç</label></div>
+                                <div id="version-models-checklist" class="mt-1 max-h-32 overflow-y-auto border p-2 rounded-md"></div>
+                            </div>
                         </form>
                         <div class="items-center px-4 py-3">
                             <button id="cancel-modal" class="px-4 py-2 bg-gray-200 rounded-md mr-2">İptal</button>
                             <button form="${formId}" type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-md">${buttonText}</button>
                         </div>
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    function getBulguViewModalHTML(bulgu) {
+        const vendorName = bulgu.vendorName || (vendorsData.find(v => v.id == bulgu.vendorId)?.name) || '';
+        const versionName = bulgu.cozumVersiyonId ? (versionsData.find(v => v.id == bulgu.cozumVersiyonId)?.versionNumber || '-') : '-';
+        const modelsList = bulgu.models || (bulgu.modelIds ? (Array.isArray(bulgu.modelIds) ? bulgu.modelIds.map(id => modelsData.find(m => String(m.id) === String(id))?.name).filter(Boolean).join(', ') : bulgu.modelIds) : '-');
+        // Render models as chips for nicer presentation
+        const modelChips = modelsList && modelsList !== '-' ? modelsList.split(',').map(m => `<span class="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded mr-1 mb-1 text-xs">${m.trim()}</span>`).join('') : '-';
+        return `
+            <div class="fixed inset-0 bg-black bg-opacity-40 backdrop-blur-sm z-50 flex items-center justify-center">
+                <div class="relative w-full max-w-3xl bg-white rounded-xl shadow-xl ring-1 ring-black/5 overflow-hidden">
+                    <div class="flex items-start justify-between p-6 border-b">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900">Bulgu Detayları</h3>
+                            <p class="text-sm text-gray-500 mt-1">#${bulgu.id} — ${bulgu.baslik}</p>
+                        </div>
+                        <button data-close-bulgu-view class="inline-flex items-center justify-center h-9 w-9 rounded-md text-gray-500 hover:bg-gray-100">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                        </button>
+                    </div>
+                    <div class="p-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
+                            <div>
+                                <div class="text-xs text-gray-500">Vendor</div>
+                                <div class="mt-1 font-medium text-gray-900">${vendorName}</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">Çözüm Beklenen Versiyon</div>
+                                <div class="mt-1 font-medium text-gray-900">${versionName || '-'}</div>
+                            </div>
+                            <div class="md:col-span-2">
+                                <div class="text-xs text-gray-500">Modeller</div>
+                                <div class="mt-2">${modelChips}</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">Kayıt Tipi</div>
+                                <div class="mt-1">${bulgu.bulguTipi}</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">Etki Seviyesi</div>
+                                <div class="mt-1">${bulgu.etkiSeviyesi}</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">Durum</div>
+                                <div class="mt-1">${bulgu.status}</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">Tespit Tarihi</div>
+                                <div class="mt-1">${bulgu.tespitTarihi || '-'}</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">Giren Kişi</div>
+                                <div class="mt-1">${bulgu.girenKullanici || '-'}</div>
+                            </div>
+                            <div class="md:col-span-2">
+                                <div class="text-xs text-gray-500">Detaylı Açıklama</div>
+                                <div class="mt-2 whitespace-pre-wrap text-gray-800">${bulgu.detayliAciklama || '-'}</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">Onaylayan Kişi</div>
+                                <div class="mt-1">${bulgu.cozumOnaylayanKullanici || '-'}</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">Onay Tarihi</div>
+                                <div class="mt-1">${bulgu.cozumOnayTarihi || '-'}</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">Vendor Takip No</div>
+                                <div class="mt-1">${bulgu.vendorTrackerNo || '-'}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-end gap-3 p-4 border-t bg-gray-50">
+                        <button data-close-bulgu-view class="px-4 py-2 rounded-md bg-white border text-sm text-gray-700 hover:bg-gray-100">Kapat</button>
                     </div>
                 </div>
             </div>`;
@@ -433,13 +589,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     async function renderBulgularPage() {
-        [vendorsData, modelsData, versionsData, bulgularData] = await Promise.all([
-            apiRequest('/api/vendors'),
-            apiRequest('/api/models'),
-            apiRequest('/api/versions'),
-            apiRequest('/api/bulgular'),
-        ]);
-        mainContent.innerHTML = getBulgularHTML(bulgularData);
+        // Load caches if empty (avoid refetching on every filter interaction)
+        if (!vendorsData.length || !modelsData.length || !versionsData.length) {
+            [vendorsData, modelsData, versionsData] = await Promise.all([
+                apiRequest('/api/vendors'),
+                apiRequest('/api/models'),
+                apiRequest('/api/versions'),
+            ]);
+        }
+        if (!bulgularData.length) {
+            bulgularData = await apiRequest('/api/bulgular');
+        }
+        // Apply client-side filters
+        const filtered = bulgularData.filter(b => {
+            const term = bulguFilters.searchTerm.trim().toLowerCase();
+            if (term) {
+                const inTitle = (b.baslik || '').toLowerCase().includes(term);
+                const inDesc = (b.detayliAciklama || '').toLowerCase().includes(term);
+                if (!inTitle && !inDesc) return false;
+            }
+            if (bulguFilters.vendorId !== 'all' && String(bulguFilters.vendorId) !== String(b.vendorId)) return false;
+            if (bulguFilters.status !== 'all' && bulguFilters.status !== b.status) return false;
+            if (bulguFilters.tip !== 'all' && bulguFilters.tip !== b.bulguTipi) return false;
+            return true;
+        });
+        mainContent.innerHTML = getBulgularHTML(filtered);
         attachBulgularEventListeners();
     }
 
@@ -474,6 +648,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('confirm-delete').addEventListener('click', async () => {
                     try {
                         await apiRequest(`/api/vendors/${vendorId}`, { method: 'DELETE' });
+                        // Invalidate vendors cache and refresh
+                        vendorsData = [];
                         await Promise.all([loadSidebarVendors(), navigateTo('yonetim')]);
                     } catch (error) { showErrorModal(error.message); } finally { modalContainer.innerHTML = ''; }
                 });
@@ -495,6 +671,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('confirm-delete').addEventListener('click', async () => {
                     try {
                         await apiRequest(`/api/models/${modelId}`, { method: 'DELETE' });
+                        // Invalidate models cache and refresh
+                        modelsData = [];
                         await navigateTo('yonetim');
                     } catch (error) { showErrorModal(error.message); } finally { modalContainer.innerHTML = ''; }
                 });
@@ -522,6 +700,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('confirm-delete').addEventListener('click', async () => {
                     try {
                         await apiRequest(`/api/versions/${versionId}`, { method: 'DELETE' });
+                        // Invalidate versions cache and refresh
+                        versionsData = [];
                         await navigateTo('yonetim');
                     } catch (error) { showErrorModal(error.message); } finally { modalContainer.innerHTML = ''; }
                 });
@@ -585,6 +765,18 @@ document.addEventListener('DOMContentLoaded', () => {
             modalContainer.innerHTML = getBulguModalHTML(vendorsData, modelsData, versionsData);
             attachBulguModalListeners();
         });
+        // View detail handler for ID links
+        document.querySelectorAll('.view-bulgu-btn').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const id = link.dataset.bulguId;
+                const bulgu = bulgularData.find(b => String(b.id) === String(id));
+                if (bulgu) {
+                    modalContainer.innerHTML = getBulguViewModalHTML(bulgu);
+                    document.querySelectorAll('[data-close-bulgu-view]').forEach(btn => btn.addEventListener('click', () => modalContainer.innerHTML = ''));
+                }
+            });
+        });
         document.querySelectorAll('.edit-bulgu-btn').forEach(button => {
             button.addEventListener('click', () => {
                 const bulguToEdit = bulgularData.find(b => b.id == button.dataset.bulguId);
@@ -608,6 +800,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
         });
+    // Bulgu filters wiring
+        const searchInput = document.getElementById('bulgu-search-input');
+    const vendorFilter = document.getElementById('bulgu-vendor-filter');
+    const statusFilter = document.getElementById('bulgu-status-filter');
+    const tipFilter = document.getElementById('bulgu-tip-filter');
+        // Debounced search: avoid re-rendering on every keystroke which causes the input to lose focus
+        if (searchInput) {
+            let bulguSearchDebounce = null;
+            searchInput.addEventListener('input', (e) => {
+                bulguFilters.searchTerm = e.target.value;
+                // preserve caret position to restore after re-render
+                const caretPos = e.target.selectionStart || e.target.value.length;
+                if (bulguSearchDebounce) clearTimeout(bulguSearchDebounce);
+                bulguSearchDebounce = setTimeout(async () => {
+                    bulguSearchDebounce = null;
+                    await renderBulgularPage();
+                    const next = document.getElementById('bulgu-search-input');
+                    if (next) {
+                        try { next.focus(); next.setSelectionRange(caretPos, caretPos); } catch (err) { next.focus(); }
+                    }
+                }, 300);
+            });
+        }
+    if (vendorFilter) vendorFilter.addEventListener('change', (e) => { bulguFilters.vendorId = e.target.value; renderBulgularPage(); });
+    if (statusFilter) statusFilter.addEventListener('change', (e) => { bulguFilters.status = e.target.value; renderBulgularPage(); });
+    if (tipFilter) tipFilter.addEventListener('change', (e) => { bulguFilters.tip = e.target.value; renderBulgularPage(); });
+    // Restore filter values after each render
+    if (searchInput) searchInput.value = bulguFilters.searchTerm;
+    if (vendorFilter) vendorFilter.value = bulguFilters.vendorId;
+    if (statusFilter) statusFilter.value = bulguFilters.status;
+    if (tipFilter) tipFilter.value = bulguFilters.tip;
     }
 
 
@@ -621,8 +844,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const url = vendor ? `/api/vendors/${vendor.id}` : '/api/vendors';
                 const method = vendor ? 'PUT' : 'POST';
                 try {
-                    await apiRequest(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-                    await Promise.all([loadSidebarVendors(), navigateTo('yonetim')]);
+                        await apiRequest(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+                        // Invalidate cached vendors so renderYonetimPage reloads latest data
+                        vendorsData = [];
+                        await Promise.all([loadSidebarVendors(), navigateTo('yonetim')]);
                 } catch (error) { showErrorModal(error.message); } finally { modalContainer.innerHTML = ''; }
             });
         }
@@ -644,6 +869,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const method = model ? 'PUT' : 'POST';
                 try {
                     await apiRequest(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+                    // Invalidate models cache so the Yönetim page fetches fresh data
+                    modelsData = [];
                     await navigateTo('yonetim');
                 } catch (error) { showErrorModal(error.message); } finally { modalContainer.innerHTML = ''; }
             });
@@ -657,7 +884,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const modelsChecklist = document.getElementById('version-models-checklist');
         const statusSelect = document.getElementById('version-status-select');
         const prodDateContainer = document.getElementById('prod-date-container');
-        const updateModelList = (vendorId) => {
+            const updateModelList = (vendorId) => {
              if (!vendorId) {
                 modelsChecklist.innerHTML = '<p class="text-xs text-gray-500">Önce vendor seçiniz.</p>'; return;
             }
@@ -665,19 +892,46 @@ document.addEventListener('DOMContentLoaded', () => {
             const selectedModelIds = isEdit ? (version.modelIds?.split(',').map(id => id.trim()) || []) : [];
             if (filteredModels.length > 0) {
                 modelsChecklist.innerHTML = filteredModels.map(model => `
-                    <div class="flex items-center space-x-2"><input type="checkbox" id="model-${model.id}" name="modelIds" value="${model.id}" ${selectedModelIds.includes(String(model.id)) ? 'checked' : ''} class="h-4 w-4 rounded border-gray-300"><label for="model-${model.id}" class="text-sm font-medium">${model.name}</label></div>`).join('');
+                    <div class="flex items-center space-x-2"><input type="checkbox" id="model-${model.id}" name="modelIds" value="${model.id}" ${selectedModelIds.includes(String(model.id)) ? 'checked' : ''} class="version-model-checkbox h-4 w-4 rounded border-gray-300"><label for="model-${model.id}" class="text-sm font-medium">${model.name}</label></div>`).join('');
+                // Ensure select-all checkbox reflects current selection
+                const selectAll = document.getElementById('version-select-all-models');
+                if (selectAll) {
+                    const allChecked = filteredModels.every(m => selectedModelIds.includes(String(m.id)));
+                    selectAll.checked = allChecked;
+                }
             } else {
                 modelsChecklist.innerHTML = '<p class="text-xs text-gray-500">Bu vendor\'a ait model bulunamadı.</p>';
             }
         };
         document.getElementById('cancel-modal')?.addEventListener('click', () => modalContainer.innerHTML = '');
         vendorSelect?.addEventListener('change', (e) => updateModelList(e.target.value));
+        // Wire select-all behavior
+        const selectAllCheckbox = document.getElementById('version-select-all-models');
+        const wireSelectAll = () => {
+            if (!selectAllCheckbox) return;
+            // Toggle all currently rendered model checkboxes
+            selectAllCheckbox.addEventListener('change', (e) => {
+                const checked = e.target.checked;
+                document.querySelectorAll('#version-models-checklist .version-model-checkbox').forEach(cb => { cb.checked = checked; });
+            });
+            // Keep select-all in sync when individual boxes change (event delegation)
+            modelsChecklist.addEventListener('change', (e) => {
+                if (!e.target.classList.contains('version-model-checkbox')) return;
+                const boxes = Array.from(document.querySelectorAll('#version-models-checklist .version-model-checkbox'));
+                if (boxes.length === 0) return;
+                selectAllCheckbox.checked = boxes.every(b => b.checked);
+            });
+        };
+        // Activate the wiring once so it works for both add and edit flows
+        wireSelectAll();
         statusSelect?.addEventListener('change', (e) => {
             prodDateContainer.classList.toggle('hidden', e.target.value !== 'Prod');
         });
         if (isEdit) {
             vendorSelect.value = version.vendorId;
             updateModelList(version.vendorId);
+            // After populating model list for edit, ensure select-all wiring is active
+            wireSelectAll();
         }
         if (form) {
             form.addEventListener('submit', async (e) => {
@@ -690,10 +944,85 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
                 const url = isEdit ? `/api/versions/${version.id}` : '/api/versions';
                 const method = isEdit ? 'PUT' : 'POST';
+                // Validation: at least one model must be selected
+                if (!data.modelIds || data.modelIds.length === 0) {
+                    const existingErr = modalContainer.querySelector('.inline-error');
+                    if (existingErr) existingErr.remove();
+                    const errEl = document.createElement('div');
+                    errEl.className = 'inline-error mb-3 text-sm text-orange-800 bg-orange-50 border border-orange-200 rounded p-2 flex items-center';
+                    errEl.innerHTML = `
+                        <svg class="w-4 h-4 mr-2 text-orange-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        <span>En az bir model seçili olmalıdır.</span>
+                    `;
+                    form.parentElement.insertBefore(errEl, form);
+                    return;
+                }
+                // If editing and status is Prod, require prodOnayDate
+                if (isEdit && data.status === 'Prod' && (!data.prodOnayDate || data.prodOnayDate.trim() === '')) {
+                    const existingErr = modalContainer.querySelector('.inline-error');
+                    if (existingErr) existingErr.remove();
+                    const errEl = document.createElement('div');
+                    errEl.className = 'inline-error mb-3 text-sm text-orange-800 bg-orange-50 border border-orange-200 rounded p-2 flex items-center';
+                    errEl.innerHTML = `
+                        <svg class="w-4 h-4 mr-2 text-orange-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        <span>Durum "Prod" ise "Prod Onay Tarihi" zorunludur.</span>
+                    `;
+                    form.parentElement.insertBefore(errEl, form);
+                    return;
+                }
+                // Validate dates are not in the future (compare as local YYYY-MM-DD)
+                const today = new Date();
+                const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+                if (data.deliveryDate && data.deliveryDate > todayStr) {
+                    const existingErr = modalContainer.querySelector('.inline-error');
+                    if (existingErr) existingErr.remove();
+                    const errEl = document.createElement('div');
+                    errEl.className = 'inline-error mb-3 text-sm text-orange-800 bg-orange-50 border border-orange-200 rounded p-2 flex items-center';
+                    errEl.innerHTML = `
+                        <svg class="w-4 h-4 mr-2 text-orange-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        <span>"Teslim Tarihi" sistem tarihinden daha ileri olamaz.</span>
+                    `;
+                    form.parentElement.insertBefore(errEl, form);
+                    return;
+                }
+                if (data.prodOnayDate && data.prodOnayDate > todayStr) {
+                    const existingErr = modalContainer.querySelector('.inline-error');
+                    if (existingErr) existingErr.remove();
+                    const errEl = document.createElement('div');
+                    errEl.className = 'inline-error mb-3 text-sm text-orange-800 bg-orange-50 border border-orange-200 rounded p-2 flex items-center';
+                    errEl.innerHTML = `
+                        <svg class="w-4 h-4 mr-2 text-orange-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        <span>"Prod Onay Tarihi" sistem tarihinden daha ileri olamaz.</span>
+                    `;
+                    form.parentElement.insertBefore(errEl, form);
+                    return;
+                }
                 try {
                     await apiRequest(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+                    // Invalidate versions cache so the Yönetim page fetches fresh data
+                    versionsData = [];
                     await navigateTo('yonetim');
-                } catch (error) { showErrorModal(error.message); } finally { modalContainer.innerHTML = ''; }
+                } catch (error) {
+                    showErrorModal(error.message);
+                } finally {
+                    modalContainer.innerHTML = '';
+                }
             });
         }
     }
@@ -713,13 +1042,44 @@ document.addEventListener('DOMContentLoaded', () => {
             const filteredModels = modelsData.filter(m => m.vendorId == vendorId);
             const filteredVersions = versionsData.filter(v => v.vendorId == vendorId);
             const selectedModelIds = isEdit ? (bulgu.modelIds?.split(',').map(id => id.trim()) || []) : [];
-            modelsChecklist.innerHTML = filteredModels.length > 0
-                ? filteredModels.map(m => `<div class="flex items-center space-x-2"><input type="checkbox" id="bulgu-model-${m.id}" name="modelIds" value="${m.id}" ${selectedModelIds.includes(String(m.id)) ? 'checked' : ''} class="h-4 w-4 rounded border-gray-300"><label for="bulgu-model-${m.id}" class="text-sm font-medium">${m.name}</label></div>`).join('')
-                : '<p class="text-xs text-gray-500">Bu vendor\'a ait model bulunamadı.</p>';
+            if (filteredModels.length > 0) {
+                modelsChecklist.innerHTML = filteredModels.map(m => `<div class="flex items-center space-x-2"><input type="checkbox" id="bulgu-model-${m.id}" name="modelIds" value="${m.id}" ${selectedModelIds.includes(String(m.id)) ? 'checked' : ''} class="h-4 w-4 rounded border-gray-300 model-checkbox"><label for="bulgu-model-${m.id}" class="text-sm font-medium">${m.name}</label></div>`).join('');
+                // After inserting, wire select-all and individual checkbox events
+                const selectAll = document.getElementById('bulgu-select-all-models');
+                const modelCheckboxes = Array.from(modelsChecklist.querySelectorAll('.model-checkbox'));
+                // Set selectAll checked state based on model checkboxes
+                if (selectAll) selectAll.checked = modelCheckboxes.length > 0 && modelCheckboxes.every(cb => cb.checked);
+                // When selectAll toggled, set all model checkboxes
+                if (selectAll) {
+                    selectAll.onchange = () => {
+                        modelCheckboxes.forEach(cb => cb.checked = selectAll.checked);
+                    };
+                }
+                // When any model checkbox changes, update selectAll state
+                modelCheckboxes.forEach(cb => cb.addEventListener('change', () => {
+                    if (selectAll) selectAll.checked = modelCheckboxes.every(ch => ch.checked);
+                }));
+            } else {
+                modelsChecklist.innerHTML = '<p class="text-xs text-gray-500">Bu vendor\'a ait model bulunamadı.</p>';
+                const selectAll = document.getElementById('bulgu-select-all-models');
+                if (selectAll) selectAll.checked = false;
+            }
             versionSelect.innerHTML = '<option value="">Seçiniz...</option>' + filteredVersions.map(v => `<option value="${v.id}" ${v.id == (isEdit ? bulgu.cozumVersiyonId : null) ? 'selected' : ''}>${v.versionNumber}</option>`).join('');
         };
         document.getElementById('cancel-modal')?.addEventListener('click', () => modalContainer.innerHTML = '');
         vendorSelect?.addEventListener('change', (e) => updateLists(e.target.value));
+        // Show/hide approval fields when status changes
+        const approvalContainer = document.getElementById('bulgu-approval-container');
+        const statusSelect = form ? form.querySelector('select[name="status"]') : null;
+        const toggleApprovalVisibility = (val) => {
+            if (!approvalContainer) return;
+            approvalContainer.classList.toggle('hidden', val !== 'Kapalı');
+        };
+        if (statusSelect) {
+            statusSelect.addEventListener('change', (e) => toggleApprovalVisibility(e.target.value));
+            // initialize visibility for edit mode
+            if (isEdit) toggleApprovalVisibility(statusSelect.value);
+        }
         if (isEdit) {
             updateLists(bulgu.vendorId);
         }
@@ -729,8 +1089,79 @@ document.addEventListener('DOMContentLoaded', () => {
                 const formData = new FormData(form);
                 const data = Object.fromEntries(formData.entries());
                 data.modelIds = formData.getAll('modelIds');
-                if (data.status === 'Kapalı' && !data.cozumOnayTarihi) {
-                    showErrorModal('Durum "Kapalı" olarak seçildiğinde "Onay Tarihi" girmek zorunludur.');
+                // For new records, require 'girenKullanici'
+                if (!isEdit && (!data.girenKullanici || data.girenKullanici.trim() === '')) {
+                    const existingErr = modalContainer.querySelector('.inline-error');
+                    if (existingErr) existingErr.remove();
+                    const errEl = document.createElement('div');
+                    errEl.className = 'inline-error mb-3 text-sm text-orange-800 bg-orange-50 border border-orange-200 rounded p-2 flex items-center';
+                    errEl.innerHTML = `
+                        <svg class="w-4 h-4 mr-2 text-orange-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        <span>Yeni kayıt eklerken "Giren Kişi" alanı zorunludur.</span>
+                    `;
+                    form.parentElement.insertBefore(errEl, form);
+                    return;
+                }
+                if (data.status === 'Kapalı') {
+                    const missing = [];
+                    if (!data.cozumOnayTarihi) missing.push('Onay Tarihi');
+                    if (!data.cozumOnaylayanKullanici) missing.push('Onaylayan Kişi');
+                    if (missing.length > 0) {
+                        // Show inline validation error inside the current modal and keep it open
+                        const existingErr = modalContainer.querySelector('.inline-error');
+                        if (existingErr) existingErr.remove();
+                        const errEl = document.createElement('div');
+                        errEl.className = 'inline-error mb-3 text-sm text-orange-800 bg-orange-50 border border-orange-200 rounded p-2 flex items-center';
+                        errEl.innerHTML = `
+                            <svg class="w-4 h-4 mr-2 text-orange-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                <line x1="12" y1="9" x2="12" y2="13"></line>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                            <span>Durum "Kapalı" seçildiğinde şu alanlar zorunludur: ${missing.join(', ')}</span>
+                        `;
+                        // insert before the form so it's visible to the user
+                        form.parentElement.insertBefore(errEl, form);
+                        return;
+                    }
+                }
+                // Validate dates are not in the future for bulgu form
+                const today = new Date();
+                const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+                if (data.tespitTarihi && data.tespitTarihi > todayStr) {
+                    const existingErr = modalContainer.querySelector('.inline-error');
+                    if (existingErr) existingErr.remove();
+                    const errEl = document.createElement('div');
+                    errEl.className = 'inline-error mb-3 text-sm text-orange-800 bg-orange-50 border border-orange-200 rounded p-2 flex items-center';
+                    errEl.innerHTML = `
+                        <svg class="w-4 h-4 mr-2 text-orange-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        <span>"Tespit Tarihi" sistem tarihinden daha ileri olamaz.</span>
+                    `;
+                    form.parentElement.insertBefore(errEl, form);
+                    return;
+                }
+                if (data.cozumOnayTarihi && data.cozumOnayTarihi > todayStr) {
+                    const existingErr = modalContainer.querySelector('.inline-error');
+                    if (existingErr) existingErr.remove();
+                    const errEl = document.createElement('div');
+                    errEl.className = 'inline-error mb-3 text-sm text-orange-800 bg-orange-50 border border-orange-200 rounded p-2 flex items-center';
+                    errEl.innerHTML = `
+                        <svg class="w-4 h-4 mr-2 text-orange-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        <span>"Onay Tarihi" sistem tarihinden daha ileri olamaz.</span>
+                    `;
+                    form.parentElement.insertBefore(errEl, form);
                     return;
                 }
                 const url = isEdit ? `/api/bulgular/${bulgu.id}` : '/api/bulgular';
@@ -738,7 +1169,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     await apiRequest(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
                     await navigateTo('bulgular');
-                } catch(error) { showErrorModal(error.message); } finally { modalContainer.innerHTML = ''; }
+                    // Only clear modal on successful submit/navigation
+                    modalContainer.innerHTML = '';
+                } catch (error) {
+                    // Keep modal open so user can fix the input; show inline error above the form
+                    const existingErr = modalContainer.querySelector('.inline-error');
+                    if (existingErr) existingErr.remove();
+                    const errEl = document.createElement('div');
+                    errEl.className = 'inline-error mb-3 text-sm text-orange-800 bg-orange-50 border border-orange-200 rounded p-2 flex items-center';
+                    errEl.innerHTML = `
+                        <svg class="w-4 h-4 mr-2 text-orange-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        <span>${error.message}</span>
+                    `;
+                    form.parentElement.insertBefore(errEl, form);
+                }
             });
         }
     }
