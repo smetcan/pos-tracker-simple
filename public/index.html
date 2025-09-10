@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="tr" class="h-full bg-gray-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS Tracker</title>
+    <!-- Stil için Tailwind CSS'i CDN üzerinden ekliyoruz -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Kenar çubuğundaki linkler için özel stil */
+        .sidebar-link {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.375rem;
+            transition: all 0.2s;
+            color: #4b5563; /* gray-600 */
+        }
+        .sidebar-link:hover {
+            background-color: #e5e7eb; /* gray-200 */
+            color: #111827; /* gray-900 */
+        }
+        .sidebar-link.active {
+             background-color: #f3f4f6; /* gray-100 */
+             color: #111827; /* gray-900 */
+        }
+        /* YENİ: Sekmeli yapı için stiller */
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .tab-btn.active {
+            border-color: #3b82f6; /* blue-500 */
+            color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="h-full">
+    <div class="flex min-h-screen">
+        <!-- SOL MENÜ (SIDEBAR) -->
+        <aside id="sidebar" class="w-64 bg-white border-r p-4 flex flex-col gap-4">
+            <div class="flex items-center gap-2 font-semibold text-lg">
+                <!-- SVG Ikonu -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                <span>POS Tracker</span>
+            </div>
+            <hr/>
+            <!-- Ana Menü Linkleri -->
+            <nav class="flex flex-col gap-1">
+                <a href="#" id="nav-dashboard" class="sidebar-link active">Ana Sayfa</a>
+                <a href="#" id="nav-bulgular" class="sidebar-link">Bulgu Takibi</a>
+                <a href="#" id="nav-yonetim" class="sidebar-link">Yönetim</a>
+            </nav>
+            <hr/>
+            <!-- Vendor Listesi Buraya Gelecek -->
+            <div id="vendor-list-container" class="flex-1">
+                <h3 class="mb-2 px-3 text-xs font-semibold uppercase text-gray-500">Vendor Modelleri</h3>
+                <nav id="vendor-list" class="flex flex-col gap-1">
+                    <!-- JavaScript ile dinamik olarak doldurulacak -->
+                </nav>
+            </div>
+        </aside>
+
+        <!-- ANA İÇERİK ALANI -->
+        <main id="main-content" class="flex-1 p-8">
+            <!-- JavaScript ile seçilen sayfanın içeriği buraya yüklenecek -->
+            <h1 class="text-3xl font-bold">Yükleniyor...</h1>
+        </main>
+    </div>
+
+    <!-- Modal Penceresi için Alan -->
+    <div id="modal-container"></div>
+
+    <!-- Tüm frontend mantığını içeren script dosyası -->
+    <script src="/script.js"></script>
+</body>
+</html>
+
